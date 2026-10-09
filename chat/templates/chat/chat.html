@@ -1,0 +1,84 @@
+{% extends "chat/base.html" %}
+{% block title %}{{ room.name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{{ room.name }}</h2>
+  <p class="info">Members: {% for m in room.members.all %}{{ m.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+  <div id="messages"></div>
+  <div id="typing"></div>
+  <div class="row">
+    <input type="text" id="input" placeholder="Type a message..." autocomplete="off">
+    <button id="send">Send</button>
+  </div>
+  <p style="margin-top:12px">
+    <input type="file" id="file">
+    <button id="upload">Share file</button>
+  </p>
+</div>
+<script>
+const roomId = {{ room.id }};
+const token = "{{ ws_token }}";
+const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+const socket = new WebSocket(wsScheme + "://" + window.location.host + "/ws/chat/" + roomId + "/?token=" + token);
+const box = document.getElementById("messages");
+const typingEl = document.getElementById("typing");
+let typingTimer = null;
+
+function addMessage(user, text, attachment, timestamp) {
+  const div = document.createElement("div");
+  div.className = "msg";
+  let body = "<span class='who'>" + user + "</span><span class='time'>" + timestamp + "</span><br>";
+  if (attachment) {
+    body += "<a href='" + attachment + "' target='_blank'>📎 " + text + "</a>";
+  } else {
+    body += document.createTextNode(text).textContent;
+  }
+  div.innerHTML = body;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+socket.onmessage = function(e) {
+  const data = JSON.parse(e.data);
+  if (data.type === "history") {
+    data.messages.forEach(m => addMessage(m.user, m.text, m.attachment, m.timestamp));
+  } else if (data.type === "message") {
+    addMessage(data.user, data.text, data.attachment, data.timestamp);
+  } else if (data.type === "typing") {
+    typingEl.textContent = data.user + " is typing...";
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => typingEl.textContent = "", 2000);
+  } else if (data.type === "presence") {
+    addMessage("System", data.user + (data.online ? " joined" : " left"), null, "");
+  }
+};
+
+document.getElementById("send").onclick = sendMessage;
+document.getElementById("input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") { sendMessage(); }
+  else { socket.send(JSON.stringify({type: "typing"})); }
+});
+
+function sendMessage() {
+  const input = document.getElementById("input");
+  if (input.value.trim() === "") return;
+  socket.send(JSON.stringify({type: "message", text: input.value}));
+  input.value = "";
+}
+
+document.getElementById("upload").onclick = function() {
+  const fileInput = document.getElementById("file");
+  if (!fileInput.files.length) { alert("Choose a file first."); return; }
+  const form = new FormData();
+  form.append("file", fileInput.files[0]);
+  fetch("/rooms/" + roomId + "/upload/", {
+    method: "POST",
+    headers: {"X-CSRFToken": "{{ csrf_token }}"},
+    body: form
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) alert("Upload failed.");
+    fileInput.value = "";
+  });
+};
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "chat/base.html" %}
+{% block title %}My rooms{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>My conversations</h2>
+  {% if rooms %}
+    <ul>
+      {% for room in rooms %}
+        <li><a href="{% url 'room_detail' room.id %}">{{ room.name }}</a>
+            {% if room.is_group %}(group){% endif %}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="info">No conversations yet — start one below.</p>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Start a one-to-one chat</h2>
+  <form method="post">{% csrf_token %}
+    {{ direct_form.as_p }}
+    <input type="submit" name="create_direct" value="Start chat">
+  </form>
+</div>
+<div class="card">
+  <h2>Create a group room</h2>
+  <form method="post">{% csrf_token %}
+    {{ group_form.as_p }}
+    <input type="submit" name="create_group" value="Create room">
+  </form>
+</div>
+{% endblock %}
